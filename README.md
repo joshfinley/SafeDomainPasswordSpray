@@ -4,8 +4,8 @@ Fork of [DomainPasswordSpray](https://github.com/dafthack/DomainPasswordSpray/tr
 
 Its unbelievable that so many password spraying tools are negligent at preventing denial of service through lockouts. To be specific, these approaches are invalid:
 - Relying on a lockout observation window to cover your a**
-- Checking the policy once and comparing only your spray attempt count against it
-- Checking the policy once before a batch spray (literally a TOCTOU bug)
+- Checking the policy once and only comparing it against the count of spray attempts
+- Checking the bad password count once before a batch spray (literally a TOCTOU bug)
 
 Red team and pentest clients generally don't like being DOS'd, so I forked this script to be a little more careful.
 
