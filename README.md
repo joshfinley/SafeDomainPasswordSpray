@@ -1,4 +1,11 @@
-# DomainPasswordSpray
+# SafeDomainPasswordSpray
+
+Fork of [DomainPasswordSpray](https://github.com/dafthack/DomainPasswordSpray/tree/master) which actually checks the bad password count before spraying!
+
+Its unbelievable that so many password spraying tools are negligent at preventing denial of service through lockouts.
+
+---
+
 DomainPasswordSpray is a tool written in PowerShell to perform a password spray attack against users of a domain. By default it will automatically generate the userlist from the domain. BE VERY CAREFUL NOT TO LOCKOUT ACCOUNTS!
 
 ## Quick Start Guide
