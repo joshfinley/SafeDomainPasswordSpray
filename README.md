@@ -2,7 +2,12 @@
 
 Fork of [DomainPasswordSpray](https://github.com/dafthack/DomainPasswordSpray/tree/master) which actually checks the bad password count before spraying!
 
-Its unbelievable that so many password spraying tools are negligent at preventing denial of service through lockouts.
+Its unbelievable that so many password spraying tools are negligent at preventing denial of service through lockouts. To be specific, these approaches are invalid:
+- Relying on a lockout observation window to cover your a**
+- Checking the policy once and comparing only your spray attempt count against it
+- Checking the policy once before a batch spray (literally a TOCTOU bug)
+
+Red team and pentest clients generally don't like being DOS'd, so I forked this script to be a little more careful.
 
 ---
 
