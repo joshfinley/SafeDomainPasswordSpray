@@ -581,7 +581,7 @@ function Invoke-SpraySinglePassword
         {
             if ($OutFile -ne "")
             {
-                Add-Content $OutFile "$User:$Password"
+                Add-Content $OutFile "$User`:$Password"
             }
             Write-Host -ForegroundColor Green "[*] SUCCESS! User:$User Password:$Password"
         }
